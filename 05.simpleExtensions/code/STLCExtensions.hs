@@ -9,11 +9,11 @@ An implementation of several extensions to the Simply Typed Lambda
 Calculus, as detailed in the book Types and Programming Languages
 (B. Pierce).
 
-Contributors: 
+Contributors:
 --------------------------
 
 (-) Leomar Camargo
-(-) Luisa Sinzker 
+(-) Luisa Sinzker
 -}
 
 module STLCExtensions where
@@ -34,10 +34,11 @@ data Type = TBool
           | TInt
           | TString
           | TUnit
+          | TPair (Type, Type)
           | TRecord [(Label,Type)]
           | TTuple [Type]
           | TArrow Type Type
-          | TSum Type Type 
+          | TSum Type Type
      deriving(Eq, Show)
 
 data Term = Var Id
@@ -48,11 +49,14 @@ data Term = Var Id
           | N Int
           | S String
           | Unit
+          | Pair (Term, Term)
+          | PairProj1 Term  -- ??
+          | PairProj2 Term  -- ??
           | Record [RItem]
           | Tuple [TItem]
           | Inl Term
           | Inr Term
-          | Case Term (Id, Term) (Id, Term) 
+          | Case Term (Id, Term) (Id, Term)
           | TProjection Int Term
           | RProjection Label Term
           | IfThenElse Term Term Term
@@ -69,6 +73,7 @@ data Value = VBool Bool
            | VUnit
            | VInl Value
            | VInr Value
+           | VPair (Value, Value)
            | VRecord [(Label, Value)]
            | VTuple [Value]
            | VFunction (Id, Type) Term
@@ -83,6 +88,11 @@ interp (S s)              = VString s
 interp Unit               = VUnit
 interp (Lambda (x,t) t1)  = VFunction (x,t) t1
 interp (Ascribe x t)      = VAscription (x, t)
+
+interp (Pair (t1, t2))      = VPair ((interp t1), (interp t2))
+interp (PairProj1 (t1, t2)) = interp t1
+interp (PairProj2 (t1, t2)) = interp t2
+
 interp (App t1 t2)        =
   let v = interp t1
   in case v of
@@ -102,14 +112,17 @@ interp (Add t1 t2)        =
   in VInt (v1 + v2)
 
 interp (Seq t1 t2)        =
-    let x = interp t1
+    let
+      x = interp t1
     in interp t2
 
-interp (Record items)     = let res = map (\(l,t) -> (l, interp t)) items
-                             in (VRecord res)
-interp (Tuple items)      = let res = map (\t -> interp t) items
-                             in (VTuple res)
-                                
+interp (Record items)     = let
+                              res = map (\(l,t) -> (l, interp t)) items
+                            in (VRecord res)
+interp (Tuple items)      = let
+                              res = map (\t -> interp t) items
+                            in (VTuple res)
+
 interp (RProjection l r)  = interp (searchRecord (l) (r))
 
 interp (TProjection i t)  = interp (searchTuple (i) (t))
@@ -120,8 +133,8 @@ interp (Inr t) = VInl (interp t)
 interp (Case t0 (x1, t1) (x2, t2)) =
   case interp t0 of
     (VInl v) -> interp $ subst x1 v t1
-    (VInr v) -> interp $ subst x2 v t2 
-  
+    (VInr v) -> interp $ subst x2 v t2
+
 
 
 subst :: Id -> Value -> Term -> Term
@@ -147,7 +160,7 @@ subst var v1 (Record items) = Record $ map (\(l,t) -> (l, subst var v1 t)) items
 subst var v1 (RProjection l t) = RProjection l (subst var v1 t)
 subst var v1 (Case t0 (x1,t1) (x2, t2)) = Case (subst var v1 t0)
                                                (x1, subst var v1 t1)
-                                               (x2, subst var v1 t2) 
+                                               (x2, subst var v1 t2)
 subst var v1 (TValue v) = TValue v
 
 -- | The type checker function. It returns either a
@@ -171,7 +184,7 @@ gamma |- (Let v e1 e2)      = gamma          |- e1 >>= \t1 ->
                               ((v,t1):gamma) |- e2 >>= \t2 ->
                               Just t2
 
-gamma |- (Record items)     = let res = map (\(l,t) -> (l, sure (gamma |- t))) items                               
+gamma |- (Record items)     = let res = map (\(l,t) -> (l, sure (gamma |- t))) items
                                in Just (TRecord res)
 
 gamma |- (Tuple items)      = let res = map (\t -> sure (gamma |- t)) items
@@ -217,7 +230,7 @@ lookup k [] = Nothing
 lookup k ((v, t):tail)
  | k == v = Just t
  | otherwise = lookup k tail
- 
+
 
 -- | A search function to records. It looks for a certain element in
 -- the record by its label and returns its value
@@ -227,8 +240,8 @@ searchRecord (x) (Record ((label,item):xs)) = if x == label then item else searc
 
 
 -- | A search function to tuples. Its looks for a certain element by index
--- in the tuple and return its value 
-searchTuple :: Int -> Term -> Term 
+-- in the tuple and return its value
+searchTuple :: Int -> Term -> Term
 searchTuple _ (Tuple [])        = error "element in Tuple not found"
 searchTuple index (Tuple items) = items !! index
 
@@ -241,7 +254,7 @@ r2 = Record [("name", S "leomar"), ("email", S "leomar@unb")]
 
 t1 = sure $ [] |- r1
 t2 = sure $ [] |- r2
-t3 = (TSum t1 t2) 
+t3 = (TSum t1 t2)
 
 getName = Lambda ("a", t3) (Case (Var "a")
                              ("x", RProjection "firstLast" (Var "x"))
