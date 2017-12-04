@@ -50,8 +50,8 @@ data Term = Var Id
           | S String
           | Unit
           | Pair (Term, Term)
-          | PairProj1 Term  -- ??
-          | PairProj2 Term  -- ??
+          | PairProj1 (Term, Term)  -- ??
+          | PairProj2 (Term, Term)  -- ??
           | Record [RItem]
           | Tuple [TItem]
           | Inl Term
