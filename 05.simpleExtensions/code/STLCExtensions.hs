@@ -30,11 +30,13 @@ type RItem = (Label, Term)
 
 type TItem = (Term)
 
+type Product = (Type, Type)
+
 data Type = TBool
           | TInt
           | TString
           | TUnit
-          | TPair (Type, Type)
+          | TPair Product
           | TRecord [(Label,Type)]
           | TTuple [Type]
           | TArrow Type Type
@@ -50,8 +52,8 @@ data Term = Var Id
           | S String
           | Unit
           | Pair (Term, Term)
-          | PairProj1 (Term, Term)  -- ??
-          | PairProj2 (Term, Term)  -- ??
+          | PairProj1 Term  -- ??
+          | PairProj2 Term  -- ??
           | Record [RItem]
           | Tuple [TItem]
           | Inl Term
@@ -89,9 +91,13 @@ interp Unit               = VUnit
 interp (Lambda (x,t) t1)  = VFunction (x,t) t1
 interp (Ascribe x t)      = VAscription (x, t)
 
-interp (Pair (t1, t2))      = VPair ((interp t1), (interp t2))
-interp (PairProj1 (t1, t2)) = interp t1
-interp (PairProj2 (t1, t2)) = interp t2
+interp (Pair (t1, t2)) = VPair ((interp t1), (interp t2))
+interp (PairProj1 p)   = case p of
+    (Pair (t1, t2)) -> interp t1
+    otherwise       -> error "not a Pair"
+interp (PairProj2 p)   = case p of
+    (Pair (t1, t2)) -> interp t2
+    otherwise       -> error "not a Pair"
 
 interp (App t1 t2)        =
   let v = interp t1
@@ -182,6 +188,16 @@ gamma |- (Var v)            = lookup v gamma >>= \t1 -> Just t1
 
 gamma |- (Let v e1 e2)      = gamma          |- e1 >>= \t1 ->
                               ((v,t1):gamma) |- e2 >>= \t2 ->
+                              Just t2
+
+gamma |- (Pair (t1, t2))    = gamma |- t1 >>= \tp1 ->
+                              gamma |- t2 >>= \tp2 ->
+                              Just $ TPair (tp1, tp2)
+
+gamma |- (PairProj1 pair)   = gamma |- pair >>= \(TPair (t1, t2)) ->
+                              Just t1
+
+gamma |- (PairProj2 pair)   = gamma |- pair >>= \(TPair (t1, t2)) ->
                               Just t2
 
 gamma |- (Record items)     = let res = map (\(l,t) -> (l, sure (gamma |- t))) items
